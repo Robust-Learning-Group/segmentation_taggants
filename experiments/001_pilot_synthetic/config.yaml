@@ -1,31 +1,56 @@
 experiment_name: "001_pilot_synthetic"
 seed: 42
-device: "auto"  # "auto", "cuda", or "cpu"
+device: "auto"  # "auto" (mps > cuda > cpu), "mps", "cuda", or "cpu"
+output_dir: null  # null -> Hydra run dir: results/<experiment>/<YYYYmmdd-HHMMSS>_<config-hash>
 
 data:
-  batch_size: 64
-  num_classes: 8
+  batch_size: 8
+  num_classes: 4
   image_size: [256, 256]
-  max_n: 7
+  max_n: 3
   min_shapes: 1
-  max_shapes: 4
-  train_samples: 8000
-  val_samples: 1600
+  max_shapes: 2
+  train_samples: 80
+  val_samples: 16
   num_workers: 0
   pin_memory: false
 
 model:
   in_channels: 3
-  num_classes: 8
+  num_classes: ${data.num_classes}  # always matches the dataset
   up_channels: 32
 
 training:
-  epochs: 10
+  epochs: 1
   lr: 0.001
   weight_decay: 0.0001
 
+evaluation:
+  save_plots: true            # plots/: training curves, per-class metrics, confusion matrices
+  num_visual_samples: 8       # fixed val samples in predictions/*.png (and W&B overlays)
+  plot_predictions_every: 0   # also save predictions/epoch_XXX.png every N epochs (0 = final only)
+
+logging:
+  # "wandb": log to Weights & Biases (requires `wandb` installed and `wandb login`).
+  # "local": results/ only; wandb is never imported, so it does not need to be installed.
+  backend: "local"
+  wandb:
+    project: "segmentation-taggants"
+    entity: null        # W&B user/team; null -> your default entity
+    group: null         # null -> experiment_name, so runs of this experiment are grouped
+    name: null          # null -> auto-generated run name
+    tags: ["pilot", "synthetic", "unet-surrogate"]
+    notes: null
+    mode: "online"      # "online", "offline" (sync later with `wandb sync`), or "disabled"
+    log_predictions_every: 1   # epochs between validation prediction overlays (0 = final only)
+    log_model: false    # upload checkpoints as a W&B model artifact
+
 hydra:
   run:
-    dir: results/${experiment_name}
+    # One folder per run: timestamp + short hash of the hyperparameters (same settings -> same hash).
+    dir: results/${experiment_name}/${now:%Y%m%d-%H%M%S}_${config_hash:}
+  sweep:
+    dir: results/${experiment_name}/multirun_${now:%Y%m%d-%H%M%S}
+    subdir: ${hydra.job.num}_${config_hash:}
   job:
     chdir: false

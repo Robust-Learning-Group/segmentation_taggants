@@ -18,6 +18,7 @@ def visualize_predictions(
     device: Optional[Union[torch.device, str]] = None,
     save_path: Optional[Union[str, Path]] = None,
     show: bool = True,
+    num_classes: Optional[int] = None,
 ) -> plt.Figure:
     """Visualize sample inputs, ground-truth masks, and model predictions from a DataLoader.
 
@@ -28,6 +29,8 @@ def visualize_predictions(
         device: Device to run inference on (defaults to model's parameter device or CPU).
         save_path: Optional file path to save the generated figure.
         show: Whether to display the plot with plt.show() (default: True).
+        num_classes: Number of classes, fixing the colour range to [0, num_classes - 1] for both
+            masks so colours are comparable. Defaults to the number of output channels of the model.
 
     Returns:
         The matplotlib Figure object.
@@ -47,6 +50,9 @@ def visualize_predictions(
     with torch.no_grad():
         logits = model(images)
         preds = torch.argmax(logits, dim=1)
+    if num_classes is None:
+        num_classes = logits.shape[1]
+    vmax = num_classes - 1
 
     images_np = images.cpu().numpy()
     masks_np = masks.cpu().numpy()
@@ -64,11 +70,11 @@ def visualize_predictions(
         axes[i, 0].set_title("Input Image")
         axes[i, 0].axis("off")
 
-        axes[i, 1].imshow(masks_np[i], cmap="viridis", vmin=0, vmax=3)
+        axes[i, 1].imshow(masks_np[i], cmap="viridis", vmin=0, vmax=vmax, interpolation="nearest")
         axes[i, 1].set_title("Ground Truth Mask")
         axes[i, 1].axis("off")
 
-        axes[i, 2].imshow(preds_np[i], cmap="viridis", vmin=0, vmax=3)
+        axes[i, 2].imshow(preds_np[i], cmap="viridis", vmin=0, vmax=vmax, interpolation="nearest")
         axes[i, 2].set_title("U-Net Prediction")
         axes[i, 2].axis("off")
 
@@ -136,7 +142,7 @@ def visualize_key_image_inference(
     axes[0].set_title("Input Image")
     axes[0].axis("off")
 
-    im = axes[1].imshow(pred, cmap="viridis", vmin=0, vmax=num_classes - 1)
+    im = axes[1].imshow(pred, cmap="viridis", vmin=0, vmax=num_classes - 1, interpolation="nearest")
     axes[1].set_title("Model Segmentation Prediction")
     axes[1].axis("off")
 

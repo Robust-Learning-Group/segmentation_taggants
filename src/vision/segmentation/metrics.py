@@ -116,7 +116,11 @@ class SegmentationMetrics:
         preds, target = preds[valid], target[valid]
 
         indices = target * self.num_classes + preds
-        counts = torch.bincount(indices, minlength=self.num_classes ** 2)
+        try:
+            counts = torch.bincount(indices, minlength=self.num_classes ** 2)
+        except (RuntimeError, NotImplementedError):
+            # Some backends (e.g. older MPS builds) lack bincount: count on CPU instead.
+            counts = torch.bincount(indices.cpu(), minlength=self.num_classes ** 2)
         self.confusion_matrix += counts.reshape(self.num_classes, self.num_classes).to(
             self.confusion_matrix.device
         )
@@ -127,7 +131,7 @@ class SegmentationMetrics:
         Returns:
             Dictionary of python floats / lists (JSON serialisable).
         """
-        cm = self.confusion_matrix.double().cpu()
+        cm = self.confusion_matrix.cpu().double()  # cast on CPU: MPS has no float64
         tp = cm.diag()
         gt_pixels = cm.sum(dim=1)     # TP + FN
         pred_pixels = cm.sum(dim=0)   # TP + FP

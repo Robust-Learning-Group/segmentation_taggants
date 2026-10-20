@@ -41,6 +41,8 @@ segmentation_taggants/
 │   └── utils/                    # Shared utilities
 │       ├── __init__.py
 │       ├── seed.py               # Deterministic seed configuration
+│       ├── tracking.py           # Local / Weights & Biases experiment trackers
+│       ├── plots.py              # Training curves, per-class metrics, prediction grids
 │       └── visualize.py          # Prediction & key inference visualization
 ├── experiments/
 │   └── 001_pilot_synthetic/      # Pilot surrogate training on synthetic shapes
@@ -57,6 +59,7 @@ segmentation_taggants/
 ├── data/                         # Local dataset storage (git-ignored)
 ├── results/                      # Checkpoints and metrics outputs (git-ignored)
 ├── requirements.txt              # Pinned project dependencies
+├── requirements-wandb.txt        # Optional W&B tracking dependency
 └── README.md                     # Project documentation (this file)
 ```
 
@@ -64,20 +67,24 @@ segmentation_taggants/
 
 ## Installation
 
-Clone this repository and install dependencies in your virtual environment:
+Dependencies are declared in `pyproject.toml` and locked in `uv.lock` (managed with [uv](https://docs.astral.sh/uv/)):
 
 ```bash
-# Clone the repository
 git clone https://github.com/hallpaz/segmentation_taggants.git
 cd segmentation_taggants
 
-# Create and activate a virtual environment (optional but recommended)
-python3 -m venv .venv
-source .venv/bin/activate
+# Creates .venv and installs everything, including the default groups:
+#   dev      -> pytest, ipykernel
+#   tracking -> wandb (only needed for logging.backend=wandb)
+uv sync
+wandb login            # once per machine, only if you log to W&B
 
-# Install dependencies
-pip install -r requirements.txt
+# Environment without Weights & Biases (use logging.backend=local)
+uv sync --no-group tracking
 ```
+
+Run commands with `uv run`, e.g. `uv run python experiments/001_pilot_synthetic/run.py` or `uv run pytest`.
+`requirements.txt` / `requirements-wandb.txt` are kept for plain `pip install -r` setups.
 
 ---
 
@@ -97,9 +104,15 @@ python experiments/001_pilot_synthetic/run.py training.epochs=1
 
 # Custom device or hyperparameter overrides
 python experiments/001_pilot_synthetic/run.py device=cpu data.batch_size=32 training.lr=0.0005
+
+# Local results only (wandb is not imported, need not be installed)
+python experiments/001_pilot_synthetic/run.py logging.backend=local
 ```
 
-Training checkpoints (`unet_surrogate.pth`), run logs, and evaluation metrics (`metrics.json`) will be written to `results/001_pilot_synthetic/`.
+Experiment tracking is selected with `logging.backend` in each experiment's `config.yaml`: `wandb` logs to Weights & Biases
+(project `segmentation-taggants`, one W&B group per experiment), `local` writes only to `results/`. See the experiment README for what is logged.
+
+Each run writes checkpoints, metrics, plots and qualitative predictions to its own folder `results/001_pilot_synthetic/<timestamp>_<config-hash>/`, and appends a summary row to `results/001_pilot_synthetic/runs.csv`.
 
 ---
 

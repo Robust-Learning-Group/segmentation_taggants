@@ -11,6 +11,8 @@ from src.vision.segmentation.config import (
     ModelConfig,
     TrainingConfig,
     ExperimentConfig,
+    LoggingConfig,
+    WandbConfig,
     register_configs,
 )
 
@@ -25,6 +27,8 @@ __all__ = [
     "ModelConfig",
     "TrainingConfig",
     "ExperimentConfig",
+    "LoggingConfig",
+    "WandbConfig",
     "register_configs",
 ]
 

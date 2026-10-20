@@ -1,0 +1,34 @@
+[project]
+name = "segmentation-taggants"
+version = "0.1.0"
+description = "Data Taggants (dataset watermarking) extended to semantic segmentation"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "torch>=2.1.0",
+  "torchvision>=0.16.0",
+  "numpy>=1.23.0",
+  "matplotlib>=3.7.0",
+  "scipy>=1.10.0",
+  "tqdm>=4.65.0",
+  "pyyaml>=6.0",
+  "hydra-core>=1.3.2",
+  "omegaconf>=2.3.0",
+  # Procedural synthetic segmentation dataset (pinned commit for reproducibility)
+  "synthdataseg @ git+https://github.com/hallpaz/synthdataseg.git@d5ed00f416bb836e0942de5cd873a41ef59e46a6",
+]
+
+[dependency-groups]
+# Experiment tracking: only needed for `logging.backend=wandb` (skip with `uv sync --no-group tracking`).
+tracking = ["wandb>=0.31.0"]
+dev = [
+  "pytest>=8.0",
+  "ipykernel>=6.29",  # run notebooks/ in VS Code / Jupyter
+]
+
+[tool.uv]
+# `uv sync` installs both groups by default; `uv sync --no-group tracking` gives a wandb-free environment.
+default-groups = ["dev", "tracking"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
