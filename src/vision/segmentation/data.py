@@ -2,7 +2,16 @@
 
 from typing import Optional, Tuple
 from torch.utils.data import DataLoader
-from synthdataseg.dataset import SyntheticSegmentationDataset
+try:
+    from synthdataseg.dataset import SyntheticSegmentationDataset
+except ImportError as err:
+    raise ImportError(
+        "synthdataseg is required to build synthetic segmentation datasets.\n"
+        "Please install it via:\n"
+        "    pip install git+https://github.com/hallpaz/synthdataseg.git@d5ed00f416bb836e0942de5cd873a41ef59e46a6\n"
+        "or install all project dependencies via:\n"
+        "    pip install -r requirements.txt"
+    ) from err
 
 
 def build_dataloaders(
