@@ -36,6 +36,7 @@ segmentation_taggants/
 │   │       ├── config.py         # Structured Hydra & OmegaConf schemas
 │   │       ├── data.py           # Dataloader wrapper around synthdataseg
 │   │       ├── models.py         # DoubleConv and UNetSurrogate
+│       ├── metrics.py        # Confusion-matrix metrics (mIoU, Dice, pixel acc.)
 │   │       └── taggants.py       # Segmentation taggant generator logic
 │   └── utils/                    # Shared utilities
 │       ├── __init__.py
@@ -46,7 +47,10 @@ segmentation_taggants/
 │       ├── README.md             # Experiment overview & baseline benchmarks
 │       ├── config.yaml           # Hyperparameters & data configuration
 │       └── run.py                # Hydra CLI runner for training & evaluation
+├── tests/
+│   └── test_segmentation_metrics.py  # Unit tests for segmentation metrics
 ├── notebooks/
+│   ├── 01_smoke_test.ipynb               # 1-epoch pipeline + metrics smoke test
 │   ├── SemanticSegmentation_Synth.ipynb  # Original exploratory Colab notebook
 │   └── reference/
 │       └── synthetic_training.ipynb      # Reference notebook copy

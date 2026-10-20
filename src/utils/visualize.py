@@ -1,7 +1,7 @@
 """Visualization utilities for segmentation models and watermark inference."""
 
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import Optional, Sequence, Tuple, Union
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
@@ -148,6 +148,56 @@ def visualize_key_image_inference(
     ]
     axes[1].legend(handles=patches, bbox_to_anchor=(1.05, 1), loc="upper left", borderaxespad=0.0)
 
+    plt.tight_layout()
+    if save_path:
+        Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+        plt.savefig(save_path, bbox_inches="tight")
+    if show:
+        plt.show()
+    return fig
+
+
+def plot_confusion_matrix(
+    confusion_matrix: Union[np.ndarray, torch.Tensor, Sequence[Sequence[int]]],
+    class_names: Optional[Sequence[str]] = None,
+    normalize: bool = True,
+    save_path: Optional[Union[str, Path]] = None,
+    show: bool = True,
+) -> plt.Figure:
+    """Plot a segmentation confusion matrix (rows = ground truth, cols = prediction).
+
+    Args:
+        confusion_matrix: (C, C) pixel counts, e.g. ``SegmentationMetrics.compute()["confusion_matrix"]``.
+        class_names: Optional class labels for the axes.
+        normalize: Row-normalise so each cell is the fraction of GT pixels (per-class recall on the diagonal).
+        save_path: Optional file path to save the figure.
+        show: Whether to call plt.show().
+
+    Returns:
+        The matplotlib Figure object.
+    """
+    cm = np.asarray(confusion_matrix.cpu() if isinstance(confusion_matrix, torch.Tensor) else confusion_matrix,
+                    dtype=np.float64)
+    num_classes = cm.shape[0]
+    if normalize:
+        row_sums = cm.sum(axis=1, keepdims=True)
+        cm = np.divide(cm, row_sums, out=np.zeros_like(cm), where=row_sums > 0)
+    labels = list(class_names) if class_names is not None else [str(i) for i in range(num_classes)]
+
+    fig, ax = plt.subplots(figsize=(1.0 + 0.8 * num_classes, 0.8 + 0.7 * num_classes))
+    im = ax.imshow(cm, cmap="Blues", vmin=0, vmax=1 if normalize else None)
+    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    ax.set_xticks(range(num_classes), labels=labels, rotation=45, ha="right")
+    ax.set_yticks(range(num_classes), labels=labels)
+    ax.set_xlabel("Predicted class")
+    ax.set_ylabel("Ground-truth class")
+    ax.set_title("Confusion matrix" + (" (row-normalised)" if normalize else " (pixels)"))
+    threshold = cm.max() / 2 if cm.size else 0
+    for i in range(num_classes):
+        for j in range(num_classes):
+            text = f"{cm[i, j]:.2f}" if normalize else f"{int(cm[i, j])}"
+            ax.text(j, i, text, ha="center", va="center", fontsize=8,
+                    color="white" if cm[i, j] > threshold else "black")
     plt.tight_layout()
     if save_path:
         Path(save_path).parent.mkdir(parents=True, exist_ok=True)

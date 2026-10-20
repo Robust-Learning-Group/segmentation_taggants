@@ -18,6 +18,31 @@ Hyperparameters are managed and validated via **Hydra** (`hydra-core`) with stru
 - **Default Batch Size:** 64 (`data.batch_size=64`).
 - **Default Epochs:** 10 (`training.epochs=10`).
 
+## Evaluation Metrics
+
+Evaluation is implemented in `src/vision/segmentation/metrics.py` (`SegmentationMetrics`, `evaluate_segmentation`).
+All metrics derive from a single 8x8 confusion matrix accumulated over the **whole validation split** (rows = ground
+truth, columns = prediction), so IoU uses dataset-level TP/FP/FN and does not depend on batch size. The validation
+pass runs with the model in `eval()` mode after every epoch.
+
+| Key | Metric | Notes |
+| :--- | :--- | :--- |
+| `pixel_acc` | Pixel accuracy | Inflated by background (~70% of pixels); an all-background predictor scores ~0.72. |
+| `mean_acc` | Mean class accuracy (mean recall) | |
+| `miou` | Mean IoU over all classes | Standard headline number. |
+| `miou_fg` | Mean IoU excluding background | **Primary metric**, used to select `unet_surrogate_best.pth`. |
+| `fwiou` | Frequency-weighted IoU | Weighted by GT pixel share. |
+| `mdice` | Mean Dice / F1 | |
+
+Per-class IoU, Dice, recall, precision and GT pixel share are also reported. Classes absent from both ground truth
+and predictions get an undefined (NaN) IoU, are excluded from the means, and are stored as `null` in `metrics.json`.
+Training-set metrics in `history` are *running* metrics accumulated during the epoch in train mode (cheap progress
+indicator, not a clean evaluation).
+
+`metrics.json` contains `final_val` (summary), `final_val_per_class`, `final_val_confusion_matrix`, `class_names`,
+`best_epoch` / `best_val_miou_fg`, and a per-epoch `history` with `train_*` / `val_*` versions of every summary metric.
+Unit tests against hand-computed values: `python -m pytest tests/test_segmentation_metrics.py`.
+
 ## Baseline Results (Observed in Original Notebook Run)
 
 In the exploratory Colab notebook (`SemanticSegmentation_Synth.ipynb`), the observed training progression and loss metrics were:
@@ -28,6 +53,8 @@ In the exploratory Colab notebook (`SemanticSegmentation_Synth.ipynb`), the obse
 | **5 / 10** | 0.4787 | 0.4780 | |
 | **10 / 10** | **0.3873** | **0.3906** | **Baseline 10-epoch checkpoint** |
 | **20 / 20** | **0.3426** | **0.3404** | Observed after 10 additional fine-tuning epochs |
+
+*The original notebook only tracked loss; IoU-based baselines will be filled in from the first full run with the metrics above.*
 
 *(Note: These figures are labeled as **observed in the original notebook run** on Google Colab GPU).*
 
@@ -46,7 +73,8 @@ python experiments/001_pilot_synthetic/run.py
 ```
 
 Outputs will be saved directly to `results/001_pilot_synthetic/`:
-- Model weights: `results/001_pilot_synthetic/unet_surrogate.pth`
+- Model weights (last epoch): `results/001_pilot_synthetic/unet_surrogate.pth`
+- Best weights by validation `miou_fg`: `results/001_pilot_synthetic/unet_surrogate_best.pth`
 - Metrics & resolved configuration: `results/001_pilot_synthetic/metrics.json`
 - Hydra run logs & configuration snapshot: `results/001_pilot_synthetic/.hydra/`
 

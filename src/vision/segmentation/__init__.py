@@ -1,6 +1,11 @@
 """Semantic segmentation adaptation of data taggants."""
 
 from src.vision.segmentation.models import DoubleConv, UNetSurrogate
+from src.vision.segmentation.metrics import (
+    SegmentationMetrics,
+    evaluate_segmentation,
+    format_metrics_table,
+)
 from src.vision.segmentation.config import (
     DataConfig,
     ModelConfig,
@@ -12,6 +17,9 @@ from src.vision.segmentation.config import (
 __all__ = [
     "DoubleConv",
     "UNetSurrogate",
+    "SegmentationMetrics",
+    "evaluate_segmentation",
+    "format_metrics_table",
     "build_dataloaders",
     "DataConfig",
     "ModelConfig",
