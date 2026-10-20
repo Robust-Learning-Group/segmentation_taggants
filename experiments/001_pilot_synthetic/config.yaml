@@ -1,0 +1,25 @@
+experiment_name: "001_pilot_synthetic"
+seed: 42
+device: "auto"  # "auto", "cuda", or "cpu"
+
+data:
+  batch_size: 64
+  num_classes: 8
+  image_size: [256, 256]
+  max_n: 7
+  min_shapes: 1
+  max_shapes: 4
+  train_samples: 8000
+  val_samples: 1600
+  num_workers: 0
+  pin_memory: false
+
+model:
+  in_channels: 3
+  num_classes: 8
+  up_channels: 32
+
+training:
+  epochs: 10
+  lr: 0.001
+  weight_decay: 0.0001
