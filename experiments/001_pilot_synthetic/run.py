@@ -1,15 +1,15 @@
-"""CLI runner for Experiment 001: Pilot Synthetic Segmentation Training."""
+"""Hydra CLI runner for Experiment 001: Pilot Synthetic Segmentation Training."""
 
-import argparse
 import json
 from pathlib import Path
 import sys
 from typing import Any, Dict
 
+import hydra
+from omegaconf import DictConfig, OmegaConf
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import yaml
 
 # Ensure project root is in sys.path
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -17,52 +17,11 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from src.utils.seed import set_seed
-from src.vision.segmentation.data import build_dataloaders
+from src.vision.segmentation.config import ExperimentConfig, register_configs
 from src.vision.segmentation.models import UNetSurrogate
 
-
-def parse_args() -> argparse.Namespace:
-    """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(
-        description="Run 001_pilot_synthetic surrogate segmentation training."
-    )
-    parser.add_argument(
-        "--config",
-        type=str,
-        default=str(Path(__file__).parent / "config.yaml"),
-        help="Path to YAML configuration file.",
-    )
-    parser.add_argument(
-        "--epochs",
-        type=int,
-        default=None,
-        help="Override number of training epochs from config.",
-    )
-    parser.add_argument(
-        "--batch-size",
-        type=int,
-        default=None,
-        help="Override batch size from config.",
-    )
-    parser.add_argument(
-        "--device",
-        type=str,
-        default=None,
-        help="Override compute device (e.g. 'cpu', 'cuda').",
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=str,
-        default=str(REPO_ROOT / "results" / "001_pilot_synthetic"),
-        help="Directory to save checkpoints and metrics.",
-    )
-    return parser.parse_args()
-
-
-def load_config(config_path: str) -> Dict[str, Any]:
-    """Load configuration from YAML file."""
-    with open(config_path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+# Register structured configuration schemas with Hydra ConfigStore
+register_configs()
 
 
 def resolve_device(device_str: str) -> torch.device:
@@ -72,71 +31,48 @@ def resolve_device(device_str: str) -> torch.device:
     return torch.device(device_str)
 
 
-def train_surrogate(
-    config: Dict[str, Any],
-    epochs_override: int | None = None,
-    batch_size_override: int | None = None,
-    device_override: str | None = None,
-    output_dir: str | Path = REPO_ROOT / "results" / "001_pilot_synthetic",
-) -> Dict[str, Any]:
-    """Train UNetSurrogate model according to configuration."""
-    output_path = Path(output_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
+def train_surrogate(cfg: DictConfig) -> Dict[str, Any]:
+    """Train UNetSurrogate model according to Hydra configuration."""
+    output_dir = Path(cfg.output_dir) if cfg.output_dir else REPO_ROOT / "results" / cfg.experiment_name
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    seed = config.get("seed", 42)
-    set_seed(seed)
+    set_seed(cfg.seed)
 
-    # Determine device
-    device_name = device_override or config.get("device", "auto")
-    device = resolve_device(device_name)
+    device = resolve_device(cfg.device)
     print(f"Training surrogate model on: {device}")
+    print("Resolved configuration:\n" + OmegaConf.to_yaml(cfg))
 
-    # Data parameters
-    data_cfg = config.get("data", {})
-    batch_size = batch_size_override or data_cfg.get("batch_size", 64)
-    image_size = tuple(data_cfg.get("image_size", [256, 256]))
-    num_classes = data_cfg.get("num_classes", 8)
-    max_n = data_cfg.get("max_n", num_classes - 1)
-    min_shapes = data_cfg.get("min_shapes", 1)
-    max_shapes = data_cfg.get("max_shapes", 4)
-    train_samples = data_cfg.get("train_samples", 8000)
-    val_samples = data_cfg.get("val_samples", 1600)
-    num_workers = data_cfg.get("num_workers", 0)
-    pin_memory = data_cfg.get("pin_memory", False)
-
+    # Build DataLoaders
+    from src.vision.segmentation.data import build_dataloaders
     train_loader, val_loader = build_dataloaders(
-        batch_size=batch_size,
-        image_size=image_size,
-        num_classes=num_classes,
-        train_samples=train_samples,
-        val_samples=val_samples,
-        min_shapes=min_shapes,
-        max_shapes=max_shapes,
-        max_n=max_n,
-        num_workers=num_workers,
-        pin_memory=pin_memory,
-        seed=seed,
+        batch_size=cfg.data.batch_size,
+        image_size=tuple(cfg.data.image_size),
+        num_classes=cfg.data.num_classes,
+        train_samples=cfg.data.train_samples,
+        val_samples=cfg.data.val_samples,
+        min_shapes=cfg.data.min_shapes,
+        max_shapes=cfg.data.max_shapes,
+        max_n=cfg.data.max_n,
+        num_workers=cfg.data.num_workers,
+        pin_memory=cfg.data.pin_memory,
+        seed=cfg.seed,
     )
 
-    # Model parameters
-    model_cfg = config.get("model", {})
-    in_channels = model_cfg.get("in_channels", 3)
-    up_channels = model_cfg.get("up_channels", 32)
+    # Initialize UNetSurrogate Model
     model = UNetSurrogate(
-        in_channels=in_channels,
-        num_classes=num_classes,
-        up_channels=up_channels,
+        in_channels=cfg.model.in_channels,
+        num_classes=cfg.model.num_classes,
+        up_channels=cfg.model.up_channels,
     ).to(device)
 
-    # Training parameters
-    train_cfg = config.get("training", {})
-    epochs = epochs_override if epochs_override is not None else train_cfg.get("epochs", 10)
-    lr = float(train_cfg.get("lr", 1e-3))
-    weight_decay = float(train_cfg.get("weight_decay", 1e-4))
-
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+    optimizer = optim.AdamW(
+        model.parameters(),
+        lr=float(cfg.training.lr),
+        weight_decay=float(cfg.training.weight_decay),
+    )
 
+    epochs = int(cfg.training.epochs)
     history = []
     print(f"Commencing surrogate training for {epochs} epoch(s)...")
 
@@ -186,42 +122,36 @@ def train_surrogate(
         })
 
     # Save model checkpoint
-    checkpoint_path = output_path / "unet_surrogate.pth"
+    checkpoint_path = output_dir / "unet_surrogate.pth"
     torch.save(model.state_dict(), checkpoint_path)
     print(f"Model checkpoint saved to {checkpoint_path}")
 
     # Save metrics
     metrics = {
-        "experiment": config.get("experiment_name", "001_pilot_synthetic"),
+        "experiment": str(cfg.experiment_name),
         "epochs": epochs,
-        "batch_size": batch_size,
+        "batch_size": int(cfg.data.batch_size),
         "device": str(device),
         "final_train_loss": final_train_loss,
         "final_val_loss": final_val_loss,
         "history": history,
+        "config": OmegaConf.to_container(cfg, resolve=True),
     }
-    metrics_path = output_path / "metrics.json"
+    metrics_path = output_dir / "metrics.json"
     with open(metrics_path, "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2)
     print(f"Metrics saved to {metrics_path}")
 
-    print(
-        f"Final Summary: Train Loss: {final_train_loss:.4f} | Val Loss: {final_val_loss:.4f}"
-    )
+    print(f"Final Summary: Train Loss: {final_train_loss:.4f} | Val Loss: {final_val_loss:.4f}")
     return metrics
 
 
-def main() -> None:
-    """Main CLI entrypoint."""
-    args = parse_args()
-    config = load_config(args.config)
-    train_surrogate(
-        config=config,
-        epochs_override=args.epochs,
-        batch_size_override=args.batch_size,
-        device_override=args.device,
-        output_dir=args.output_dir,
-    )
+@hydra.main(version_base="1.3", config_path=".", config_name="config")
+def main(cfg: DictConfig) -> None:
+    """Main Hydra entrypoint."""
+    schema = OmegaConf.structured(ExperimentConfig)
+    validated_cfg = OmegaConf.merge(schema, cfg)
+    train_surrogate(validated_cfg)
 
 
 if __name__ == "__main__":

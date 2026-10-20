@@ -7,10 +7,7 @@ try:
 except ImportError as err:
     raise ImportError(
         "synthdataseg is required to build synthetic segmentation datasets.\n"
-        "Please install it via:\n"
-        "    pip install git+https://github.com/hallpaz/synthdataseg.git@d5ed00f416bb836e0942de5cd873a41ef59e46a6\n"
-        "or install all project dependencies via:\n"
-        "    pip install -r requirements.txt"
+        "Please install the dependencies listed in requirements.txt (including synthdataseg)."
     ) from err
 
 
