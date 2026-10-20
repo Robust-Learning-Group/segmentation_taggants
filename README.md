@@ -33,6 +33,7 @@ segmentation_taggants/
 │   │   ├── __init__.py
 │   │   └── segmentation/         # Segmentation extension
 │   │       ├── __init__.py
+│   │       ├── config.py         # Structured Hydra & OmegaConf schemas
 │   │       ├── data.py           # Dataloader wrapper around synthdataseg
 │   │       ├── models.py         # DoubleConv and UNetSurrogate
 │   │       └── taggants.py       # Segmentation taggant generator logic
@@ -44,7 +45,7 @@ segmentation_taggants/
 │   └── 001_pilot_synthetic/      # Pilot surrogate training on synthetic shapes
 │       ├── README.md             # Experiment overview & baseline benchmarks
 │       ├── config.yaml           # Hyperparameters & data configuration
-│       └── run.py                # CLI runner for training & evaluation
+│       └── run.py                # Hydra CLI runner for training & evaluation
 ├── notebooks/
 │   ├── SemanticSegmentation_Synth.ipynb  # Original exploratory Colab notebook
 │   └── reference/
@@ -78,17 +79,23 @@ pip install -r requirements.txt
 
 ## Running the Pilot Experiment
 
-To reproduce the pilot surrogate model training on the synthetic geometric dataset:
+Experiments use **Hydra** (`hydra-core`) to manage and validate hyperparameters:
 
 ```bash
-# Full 10-epoch training run (matches notebook baseline)
-python experiments/001_pilot_synthetic/run.py --config experiments/001_pilot_synthetic/config.yaml
+# Inspect resolved configuration without running
+python experiments/001_pilot_synthetic/run.py --cfg job
 
-# Fast 1-epoch smoke test
-python experiments/001_pilot_synthetic/run.py --config experiments/001_pilot_synthetic/config.yaml --epochs 1
+# Full 10-epoch training run (matches notebook baseline)
+python experiments/001_pilot_synthetic/run.py
+
+# Fast 1-epoch smoke test with CLI override
+python experiments/001_pilot_synthetic/run.py training.epochs=1
+
+# Custom device or hyperparameter overrides
+python experiments/001_pilot_synthetic/run.py device=cpu data.batch_size=32 training.lr=0.0005
 ```
 
-Training checkpoints (`unet_surrogate.pth`) and evaluation metrics (`metrics.json`) will be written to `results/001_pilot_synthetic/`.
+Training checkpoints (`unet_surrogate.pth`), run logs, and evaluation metrics (`metrics.json`) will be written to `results/001_pilot_synthetic/`.
 
 ---
 
