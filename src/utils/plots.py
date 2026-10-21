@@ -42,9 +42,19 @@ def _style(ax: plt.Axes, title: str, ylabel: Optional[str] = None, xlabel: Optio
 
 def _save(fig: plt.Figure, save_path: Optional[PathLike]) -> plt.Figure:
     if save_path is not None:
-        Path(save_path).parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(save_path, dpi=150, bbox_inches="tight", facecolor="white")
+        save_figure_atomic(fig, save_path, dpi=150, facecolor="white")
     return fig
+
+
+def save_figure_atomic(fig: plt.Figure, save_path: PathLike, **kwargs) -> None:
+    """Save via a temp file + rename, so readers (e.g. a notebook polling Drive) never see a partial PNG."""
+    import os
+
+    path = Path(save_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    fig.savefig(tmp, format=path.suffix.lstrip(".") or "png", bbox_inches="tight", **kwargs)
+    os.replace(tmp, path)
 
 
 def class_colors(palette: Optional[np.ndarray], num_classes: int) -> List[str]:

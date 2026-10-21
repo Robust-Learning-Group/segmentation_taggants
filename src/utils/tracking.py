@@ -33,6 +33,7 @@ class LocalTracker:
     """No-op tracker: results are only written locally (``metrics.json``, checkpoints)."""
 
     backend = "local"
+    run_id: Optional[str] = None
 
     def log_epoch(self, epoch: int, train: Dict[str, Any], val: Dict[str, Any], lr: Optional[float] = None) -> None:
         pass
@@ -40,7 +41,8 @@ class LocalTracker:
     def log_predictions(self, model: nn.Module, epoch: int, final: bool = False) -> None:
         pass
 
-    def log_final(self, final_val: Dict[str, Any], best: Dict[str, Any], output_dir: Path) -> None:
+    def log_final(self, final_val: Dict[str, Any], best: Dict[str, Any], output_dir: Path,
+                  test: Optional[Dict[str, Any]] = None) -> None:
         pass
 
     def set_config(self, values: Dict[str, Any]) -> None:
@@ -67,6 +69,7 @@ class WandbTracker(LocalTracker):
         sample_masks: Optional[torch.Tensor] = None,
         device: Optional[torch.device] = None,
         run_name: Optional[str] = None,
+        resume_id: Optional[str] = None,
     ) -> None:
         try:
             import wandb
@@ -99,7 +102,11 @@ class WandbTracker(LocalTracker):
             dir=str(output_dir),
             config=OmegaConf.to_container(cfg, resolve=True),
             reinit="finish_previous",  # safe for Hydra --multirun (several runs in one process)
+            # Resuming a checkpointed run continues the *same* W&B run (charts keep counting).
+            id=resume_id,
+            resume="allow" if resume_id else None,
         )
+        self.run_id = self.run.id
         # Per-epoch x-axis and run-table summaries.
         self.run.define_metric("epoch")
         self.run.define_metric("train/*", step_metric="epoch")
@@ -177,8 +184,14 @@ class WandbTracker(LocalTracker):
         else:
             self.run.log({"epoch": epoch, "val/predictions": overlays})
 
-    def log_final(self, final_val: Dict[str, Any], best: Dict[str, Any], output_dir: Path) -> None:
+    def log_final(self, final_val: Dict[str, Any], best: Dict[str, Any], output_dir: Path,
+                  test: Optional[Dict[str, Any]] = None) -> None:
         wandb = self.wandb
+        if test is not None:  # held-out test split, evaluated with the best checkpoint
+            for key in SCALAR_METRICS:
+                self.run.summary[f"test/{key}"] = test[key]
+            for name, iou in zip(self.class_names, test["per_class_iou"]):
+                self.run.summary[f"test/iou/{name}"] = iou
         for key in SCALAR_METRICS:
             self.run.summary[f"final/{key}"] = final_val[key]
         self.run.summary["final/loss"] = final_val["loss"]
@@ -258,9 +271,11 @@ def build_tracker(
     sample_masks: Optional[torch.Tensor] = None,
     device: Optional[torch.device] = None,
     run_name: Optional[str] = None,
+    resume_id: Optional[str] = None,
 ) -> LocalTracker:
     """Return the tracker selected by ``cfg.logging.backend``."""
     validate_logging_config(cfg.logging)
     if cfg.logging.backend == "wandb":
-        return WandbTracker(cfg, output_dir, class_names, sample_images, sample_masks, device, run_name=run_name)
+        return WandbTracker(cfg, output_dir, class_names, sample_images, sample_masks, device,
+                            run_name=run_name, resume_id=resume_id)
     return LocalTracker()

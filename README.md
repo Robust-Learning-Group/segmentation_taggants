@@ -33,10 +33,12 @@ segmentation_taggants/
 │   │   ├── __init__.py
 │   │   └── segmentation/         # Segmentation extension
 │   │       ├── __init__.py
-│   │       ├── config.py         # Structured Hydra & OmegaConf schemas
-│   │       ├── data.py           # Dataloader wrapper around synthdataseg
-│   │       ├── models.py         # DoubleConv and UNetSurrogate
-│       ├── metrics.py        # Confusion-matrix metrics (mIoU, Dice, pixel acc.)
+│   │       ├── config.py         # Structured Hydra & OmegaConf schemas, run-folder / resume resolvers
+│   │       ├── data.py           # synthdataseg datasets, render-once cache, loaders
+│   │       ├── engine.py         # Shared training loop: AMP, LR schedule, checkpoints, resume, evaluation
+│   │       ├── losses.py         # CE + soft Dice loss, label-preserving flip/rot90 augmentation
+│   │       ├── metrics.py        # Confusion-matrix metrics (mIoU, Dice, pixel acc.)
+│   │       ├── models.py         # DoubleConv and UNetSurrogate (configurable depth)
 │   │       └── taggants.py       # Segmentation taggant generator logic
 │   └── utils/                    # Shared utilities
 │       ├── __init__.py
@@ -45,14 +47,19 @@ segmentation_taggants/
 │       ├── plots.py              # Training curves, per-class metrics, prediction grids
 │       └── visualize.py          # Prediction & key inference visualization
 ├── experiments/
-│   └── 001_pilot_synthetic/      # Pilot surrogate training on synthetic shapes
-│       ├── README.md             # Experiment overview & baseline benchmarks
-│       ├── config.yaml           # Hyperparameters & data configuration
-│       └── run.py                # Hydra CLI runner for training & evaluation
+│   ├── 001_pilot_synthetic/      # Pilot surrogate training on synthetic shapes
+│   │   ├── README.md             # Experiment overview & baseline benchmarks
+│   │   ├── config.yaml           # Hyperparameters & data configuration
+│   │   └── run.py                # Hydra CLI runner (thin wrapper around the engine)
+│   └── 002_shapes6_unet/         # 6-class shapes, compact depth-4 U-Net, target mIoU > 0.85
+│       ├── README.md             # Hyperparameter rationale, inspection schedule, resuming
+│       ├── config.yaml
+│       └── run.py
 ├── tests/
 │   └── test_segmentation_metrics.py  # Unit tests for segmentation metrics
 ├── notebooks/
 │   ├── 01_smoke_test.ipynb               # 1-epoch pipeline + metrics smoke test
+│   ├── 02_colab_train_shapes6.ipynb      # Train experiment 002 on Google Colab (Drive, auto-resume)
 │   ├── SemanticSegmentation_Synth.ipynb  # Original exploratory Colab notebook
 │   └── reference/
 │       └── synthetic_training.ipynb      # Reference notebook copy
@@ -112,7 +119,17 @@ python experiments/001_pilot_synthetic/run.py logging.backend=local
 Experiment tracking is selected with `logging.backend` in each experiment's `config.yaml`: `wandb` logs to Weights & Biases
 (project `segmentation-taggants`, one W&B group per experiment), `local` writes only to `results/`. See the experiment README for what is logged.
 
-Each run writes checkpoints, metrics, plots and qualitative predictions to its own folder `results/001_pilot_synthetic/<timestamp>_<config-hash>/`, and appends a summary row to `results/001_pilot_synthetic/runs.csv`.
+Each run writes checkpoints, metrics, plots and qualitative predictions to its own folder `results/<experiment>/<timestamp>_<config-hash>/`, and appends a summary row to `results/<experiment>/runs.csv`.
+
+**Resuming:** `checkpoints/last.pth` stores the full training state. With `training.resume=auto`, re-running the same
+configuration continues its newest unfinished run (same folder, same W&B run, metrics keep counting);
+`training.resume=<run folder or checkpoint>` continues a specific run.
+
+## Training on Google Colab
+
+`notebooks/02_colab_train_shapes6.ipynb` clones the repo (private: add a `GITHUB_TOKEN` Colab secret), installs the
+dependencies from `pyproject.toml`, keeps the dataset cache and results on Google Drive, trains in the background with
+live monitoring, and resumes automatically after a disconnect. Add a `WANDB_API_KEY` secret to also log to W&B.
 
 ---
 

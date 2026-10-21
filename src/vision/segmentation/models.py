@@ -37,31 +37,40 @@ class DoubleConv(nn.Module):
 
 
 class UNetSurrogate(nn.Module):
-    """Compact U-Net architecture used as a surrogate model for semantic segmentation taggants."""
+    """Compact U-Net used as a surrogate model for semantic segmentation taggants.
 
-    def __init__(self, in_channels: int, num_classes: int, up_channels: int = 32) -> None:
+    ``depth`` is the number of 2x downsamplings. Each extra level doubles the receptive field
+    (depth=3: 92 px, depth=4: 188 px, depth=5: 380 px) and quadruples the parameter count for a
+    fixed ``up_channels``. Parameter names (``down1``, ``pool1``, ``up1``, ``conv_up1``, ...) are the
+    same as the original fixed-depth model, so ``depth=3`` checkpoints load unchanged.
+    """
+
+    def __init__(self, in_channels: int, num_classes: int, up_channels: int = 32, depth: int = 3) -> None:
         """Initialize UNetSurrogate.
 
         Args:
             in_channels: Number of channels in input image (e.g., 3 for RGB).
             num_classes: Number of semantic segmentation classes.
-            up_channels: Base channel dimension for encoder/decoder (default: 32).
+            up_channels: Base channel dimension; level ``i`` has ``up_channels * 2**i`` channels.
+            depth: Number of downsampling steps (default 3, the original architecture).
         """
         super().__init__()
-        self.down1 = DoubleConv(in_channels, up_channels)
-        self.pool1 = nn.MaxPool2d(2)
-        self.down2 = DoubleConv(up_channels, 2 * up_channels)
-        self.pool2 = nn.MaxPool2d(2)
-        self.down3 = DoubleConv(2 * up_channels, 4 * up_channels)
-        self.pool3 = nn.MaxPool2d(2)
-        self.down4 = DoubleConv(4 * up_channels, 8 * up_channels)
+        if depth < 1:
+            raise ValueError(f"depth must be >= 1, got {depth}")
+        self.depth = depth
+        channels = [up_channels * 2 ** i for i in range(depth + 1)]
 
-        self.up1 = nn.ConvTranspose2d(8 * up_channels, 4 * up_channels, kernel_size=2, stride=2)
-        self.conv_up1 = DoubleConv(8 * up_channels, 4 * up_channels)
-        self.up2 = nn.ConvTranspose2d(4 * up_channels, 2 * up_channels, kernel_size=2, stride=2)
-        self.conv_up2 = DoubleConv(4 * up_channels, 2 * up_channels)
-        self.up3 = nn.ConvTranspose2d(2 * up_channels, up_channels, kernel_size=2, stride=2)
-        self.conv_up3 = DoubleConv(2 * up_channels, up_channels)
+        # Encoder: down1 .. down{depth+1}, pool1 .. pool{depth}
+        for i in range(depth + 1):
+            setattr(self, f"down{i + 1}", DoubleConv(in_channels if i == 0 else channels[i - 1], channels[i]))
+            if i < depth:
+                setattr(self, f"pool{i + 1}", nn.MaxPool2d(2))
+
+        # Decoder: up1 is the deepest upsampling (bottleneck -> level depth-1)
+        for j in range(depth):
+            level = depth - 1 - j
+            setattr(self, f"up{j + 1}", nn.ConvTranspose2d(channels[level + 1], channels[level], kernel_size=2, stride=2))
+            setattr(self, f"conv_up{j + 1}", DoubleConv(2 * channels[level], channels[level]))
 
         self.out = nn.Conv2d(up_channels, num_classes, kernel_size=1)
 
@@ -69,26 +78,21 @@ class UNetSurrogate(nn.Module):
         """Forward pass through U-Net encoder, skip connections, decoder, and classifier.
 
         Args:
-            x: Input image tensor of shape (B, in_channels, H, W).
+            x: Input image tensor of shape (B, in_channels, H, W); H and W must be divisible by 2**depth.
 
         Returns:
             Logits tensor of shape (B, num_classes, H, W).
         """
-        d1 = self.down1(x)
-        d2 = self.down2(self.pool1(d1))
-        d3 = self.down3(self.pool2(d2))
-        bottleneck = self.down4(self.pool3(d3))
+        skips = []
+        for i in range(self.depth + 1):
+            x = getattr(self, f"down{i + 1}")(x)
+            if i < self.depth:
+                skips.append(x)
+                x = getattr(self, f"pool{i + 1}")(x)
 
-        u1 = self.up1(bottleneck)
-        u1 = torch.cat([u1, d3], dim=1)
-        u1 = self.conv_up1(u1)
+        for j in range(self.depth):
+            x = getattr(self, f"up{j + 1}")(x)
+            x = torch.cat([x, skips.pop()], dim=1)
+            x = getattr(self, f"conv_up{j + 1}")(x)
 
-        u2 = self.up2(u1)
-        u2 = torch.cat([u2, d2], dim=1)
-        u2 = self.conv_up2(u2)
-
-        u3 = self.up3(u2)
-        u3 = torch.cat([u3, d1], dim=1)
-        u3 = self.conv_up3(u3)
-
-        return self.out(u3)
+        return self.out(x)

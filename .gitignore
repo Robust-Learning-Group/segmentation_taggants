@@ -26,3 +26,6 @@ mlruns/
 .env
 .env.*
 *.local.yaml
+
+# Local stand-in for Google Drive when running the Colab notebook outside Colab
+colab_local/

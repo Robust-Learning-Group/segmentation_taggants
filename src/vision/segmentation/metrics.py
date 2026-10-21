@@ -198,7 +198,9 @@ def evaluate_segmentation(
     )
     loss_sum, n_samples = 0.0, 0
     for images, masks in loader:
-        images, masks = images.to(device), masks.to(device)
+        images, masks = images.to(device), masks.to(device).long()
+        if images.dtype == torch.uint8:  # cached datasets store uint8 images
+            images = images.float() / 255.0
         logits = model(images)
         if criterion is not None:
             loss_sum += criterion(logits, masks).item() * images.shape[0]

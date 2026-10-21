@@ -206,8 +206,9 @@ def plot_confusion_matrix(
                     color="white" if cm[i, j] > threshold else "black")
     plt.tight_layout()
     if save_path:
-        Path(save_path).parent.mkdir(parents=True, exist_ok=True)
-        plt.savefig(save_path, bbox_inches="tight")
+        from src.utils.plots import save_figure_atomic
+
+        save_figure_atomic(fig, save_path)
     if show:
         plt.show()
     return fig
