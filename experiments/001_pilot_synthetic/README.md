@@ -64,7 +64,7 @@ What is logged (same keys in every experiment, so runs can be compared directly 
 | :--- | :--- |
 | Config | Full resolved Hydra config (`data.*`, `model.*`, `training.*`, `seed`, ...) plus `model/n_params`: filter, group and build parallel-coordinate plots by any hyperparameter. |
 | Charts (x = `epoch`) | `train/*` and `val/*` for loss, `pixel_acc`, `mean_acc`, `miou`, `miou_fg`, `fwiou`, `mdice`; `val_iou/<class>` per-class IoU; `lr`. |
-| Media | `val/predictions`: fixed validation samples with toggleable ground-truth / prediction mask overlays (every `log_predictions_every` epochs). |
+| Media | `val/predictions`: fixed validation samples with toggleable ground-truth / prediction mask overlays (every `evaluation.plot_predictions_every` epochs, same setting as the local `predictions/epoch_XXX.png`). |
 | Final evaluation | `final/per_class` table + IoU bar chart, interactive `final/confusion_matrix` (pixel counts) and row-normalised heat-map, `final/samples` table with per-sample scores (sort to find failures). |
 | Run summary | `final/<metric>`, `final/iou/<class>`, `best_epoch`, `best/val_miou_fg`, max/min of `val/miou_fg`, `val/miou`, `val/loss`: these are the columns of the runs table used for cross-experiment comparison. |
 | Files / artifacts | `metrics.json`; with `logging.wandb.log_model=true`, final and best checkpoints as a `model` artifact. |

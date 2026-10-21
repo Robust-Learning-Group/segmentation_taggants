@@ -75,7 +75,9 @@ class EvaluationConfig:
 
     save_plots: bool = True  # training curves, per-class metrics, confusion matrices -> plots/
     num_visual_samples: int = 8  # fixed validation samples in predictions/*.png (and W&B overlays)
-    plot_predictions_every: int = 0  # also save predictions/epoch_XXX.png every N epochs (0 = final only)
+    # Qualitative predictions every N epochs: predictions/epoch_XXX.png and, with W&B, val/predictions overlays.
+    # 0 = final only (predictions/final.png and W&B final/predictions are always produced).
+    plot_predictions_every: int = 0
 
     def __post_init__(self) -> None:
         if self.num_visual_samples < 0:
@@ -99,7 +101,6 @@ class WandbConfig:
     tags: List[str] = field(default_factory=list)
     notes: Optional[str] = None
     mode: str = "online"  # "online", "offline" (sync later with `wandb sync`), "disabled"
-    log_predictions_every: int = 1  # log val prediction overlays every N epochs (0 = final only)
     log_model: bool = False  # upload final + best checkpoints as a W&B model artifact
 
     def __post_init__(self) -> None:
@@ -121,8 +122,6 @@ def validate_wandb_config(cfg) -> None:
     """Validate W&B settings (works on dataclasses and OmegaConf nodes)."""
     if cfg.mode not in WANDB_MODES:
         raise ValueError(f"logging.wandb.mode must be one of {WANDB_MODES}, got {cfg.mode!r}")
-    if cfg.log_predictions_every < 0:
-        raise ValueError(f"log_predictions_every must be >= 0, got {cfg.log_predictions_every}")
 
 
 def validate_logging_config(cfg) -> None:

@@ -148,7 +148,7 @@ class WandbTracker(LocalTracker):
     def log_predictions(self, model: nn.Module, epoch: int, final: bool = False) -> None:
         if self.sample_images is None or len(self.sample_images) == 0:
             return
-        every = int(self.wcfg.log_predictions_every)
+        every = int(self.cfg.evaluation.plot_predictions_every)  # shared with the local PNGs
         if not final and (every <= 0 or epoch % every != 0):
             return
         was_training = model.training

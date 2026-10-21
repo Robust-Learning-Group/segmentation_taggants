@@ -21,14 +21,14 @@ model:
   up_channels: 32
 
 training:
-  epochs: 1
+  epochs: 4
   lr: 0.001
   weight_decay: 0.0001
 
 evaluation:
   save_plots: true            # plots/: training curves, per-class metrics, confusion matrices
   num_visual_samples: 8       # fixed val samples in predictions/*.png (and W&B overlays)
-  plot_predictions_every: 0   # also save predictions/epoch_XXX.png every N epochs (0 = final only)
+  plot_predictions_every: 0   # predictions every N epochs, locally (epoch_XXX.png) and on W&B (0 = final only)
 
 logging:
   # "wandb": log to Weights & Biases (requires `wandb` installed and `wandb login`).
@@ -42,7 +42,6 @@ logging:
     tags: ["pilot", "synthetic", "unet-surrogate"]
     notes: null
     mode: "online"      # "online", "offline" (sync later with `wandb sync`), or "disabled"
-    log_predictions_every: 1   # epochs between validation prediction overlays (0 = final only)
     log_model: false    # upload checkpoints as a W&B model artifact
 
 hydra:
