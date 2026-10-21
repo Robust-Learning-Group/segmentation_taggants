@@ -1,133 +1,121 @@
-# Data Taggants
+# Data Taggants for Semantic Segmentation
 
-Research implementation for **Data Taggants: Dataset Ownership Verification via
-Harmless Targeted Data Poisoning** ([paper](https://arxiv.org/abs/2410.09101)).
+This repository adapts the **Data Taggants** dataset watermarking framework to **semantic segmentation**. It builds cleanly upon the original *Data Taggants: Concealing and Detecting Watermarks in Machine Learning Datasets* method while keeping the original classification-oriented paper implementation as an untouched, read-only baseline.
 
-The workflow trains a clean surrogate, crafts small clean-label image
-perturbations by gradient matching, trains a fresh model on the modified data,
-and tests that model on secret image/label keys. This release contains code and
-configuration examples only—not datasets, pretrained weights, figures, stored
-keys, historical results, or the development repository's Git history.
+## Overview
+
+In classification data taggants, clean dataset poisoning introduces a subtle trigger to key samples causing a watermark detector to verify model provenance via hypothesis testing. In semantic segmentation, we adapt this framework to pixel-level dense prediction tasks using synthetic segmentation datasets and differentiable U-Net surrogate models.
+
+Key components:
+- **Baseline (`baseline/`):** The original classification paper implementation preserved verbatim as a read-only reference.
+- **Library (`src/`):** Modular components for domain-agnostic watermark theory (`src/core/`), segmentation surrogates and loaders (`src/vision/segmentation/`), and visualization/reproducibility tools (`src/utils/`).
+- **Experiments (`experiments/`):** Self-contained, reproducible experiment configs, execution scripts, and metric trackers.
+
+---
+
+## Directory Structure
+
+```text
+segmentation_taggants/
+├── baseline/                     # Original paper code (read-only baseline, do not edit)
+│   ├── README.md                 # Baseline reference notice
+│   ├── README_original.md        # Original paper documentation
+│   ├── requirements.txt          # Original paper dependencies
+│   └── src/                      # Original classification modules
+├── src/
+│   ├── __init__.py
+│   ├── core/                     # Domain-agnostic math & statistics
+│   │   ├── __init__.py
+│   │   ├── base.py               # Abstract interfaces for generators & detectors
+│   │   ├── detection.py          # Binomial tests, p-value calculations
+│   │   └── keys.py               # Key generation logic & schemas
+│   ├── vision/                   # Vision-specific adapters
+│   │   ├── __init__.py
+│   │   └── segmentation/         # Segmentation extension
+│   │       ├── __init__.py
+│   │       ├── config.py         # Structured Hydra & OmegaConf schemas
+│   │       ├── data.py           # Dataloader wrapper around synthdataseg
+│   │       ├── models.py         # DoubleConv and UNetSurrogate
+│       ├── metrics.py        # Confusion-matrix metrics (mIoU, Dice, pixel acc.)
+│   │       └── taggants.py       # Segmentation taggant generator logic
+│   └── utils/                    # Shared utilities
+│       ├── __init__.py
+│       ├── seed.py               # Deterministic seed configuration
+│       ├── tracking.py           # Local / Weights & Biases experiment trackers
+│       ├── plots.py              # Training curves, per-class metrics, prediction grids
+│       └── visualize.py          # Prediction & key inference visualization
+├── experiments/
+│   └── 001_pilot_synthetic/      # Pilot surrogate training on synthetic shapes
+│       ├── README.md             # Experiment overview & baseline benchmarks
+│       ├── config.yaml           # Hyperparameters & data configuration
+│       └── run.py                # Hydra CLI runner for training & evaluation
+├── tests/
+│   └── test_segmentation_metrics.py  # Unit tests for segmentation metrics
+├── notebooks/
+│   ├── 01_smoke_test.ipynb               # 1-epoch pipeline + metrics smoke test
+│   ├── SemanticSegmentation_Synth.ipynb  # Original exploratory Colab notebook
+│   └── reference/
+│       └── synthetic_training.ipynb      # Reference notebook copy
+├── data/                         # Local dataset storage (git-ignored)
+├── results/                      # Checkpoints and metrics outputs (git-ignored)
+├── requirements.txt              # Pinned project dependencies
+├── requirements-wandb.txt        # Optional W&B tracking dependency
+└── README.md                     # Project documentation (this file)
+```
+
+---
 
 ## Installation
 
-Use Python 3.11 in an isolated environment:
+Dependencies are declared in `pyproject.toml` and locked in `uv.lock` (managed with [uv](https://docs.astral.sh/uv/)):
 
 ```bash
-python3.11 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
+git clone https://github.com/hallpaz/segmentation_taggants.git
+cd segmentation_taggants
+
+# Creates .venv and installs everything, including the default groups:
+#   dev      -> pytest, ipykernel
+#   tracking -> wandb (only needed for logging.backend=wandb)
+uv sync
+wandb login            # once per machine, only if you log to W&B
+
+# Environment without Weights & Biases (use logging.backend=local)
+uv sync --no-group tracking
 ```
 
-The pinned PyTorch/torchvision and timm versions form a **legacy compatibility
-environment**, not a claim that these are the latest or suitable for production.
-Install a matching CUDA build for GPU experiments and use only trusted local
-checkpoints. Full ImageNet runs require substantial GPU compute and storage.
-The optional `fusedlamb` optimizer used in the reference recipe requires
-[NVIDIA Apex](https://github.com/NVIDIA/apex), built for that PyTorch/CUDA setup.
-`OPT=lamb` selects timm's non-fused implementation for portability, but is not
-bitwise-equivalent to the original fused recipe. LPIPS downloads VGG weights
-when the perceptual penalty is first used.
+Run commands with `uv run`, e.g. `uv run python experiments/001_pilot_synthetic/run.py` or `uv run pytest`.
+`requirements.txt` / `requirements-wandb.txt` are kept for plain `pip install -r` setups.
 
-## 1. Prepare your data
+---
 
-Obtain ImageNet through its authorized distribution. Organize both splits by
-class, with the same class-directory names in each split:
+## Running the Pilot Experiment
 
-```text
-your_imagenet/
-  train/<class>/<image>
-  val/<class>/<image>
-```
-
-The loader's `*_images.npy` files contain **filenames**, not pixel arrays.
-Generate deterministic indices without copying or modifying images:
+Experiments use **Hydra** (`hydra-core`) to manage and validate hyperparameters:
 
 ```bash
-python tools/prepare_imagenet.py --root "$IMAGENET_ROOT" --output data/imagenet_index
-export DATA_PATH=data/imagenet_index
+# Inspect resolved configuration without running
+python experiments/001_pilot_synthetic/run.py --cfg job
+
+# Full 10-epoch training run (matches notebook baseline)
+python experiments/001_pilot_synthetic/run.py
+
+# Fast 1-epoch smoke test with CLI override
+python experiments/001_pilot_synthetic/run.py training.epochs=1
+
+# Custom device or hyperparameter overrides
+python experiments/001_pilot_synthetic/run.py device=cpu data.batch_size=32 training.lr=0.0005
+
+# Local results only (wandb is not imported, need not be installed)
+python experiments/001_pilot_synthetic/run.py logging.backend=local
 ```
 
-Four arrays are produced: `train_images.npy`, `train_labels.npy`,
-`val_images.npy`, and `val_labels.npy`. Relative filenames are resolved against
-the index directory; legacy absolute filename arrays remain supported. Preserve
-the relative dataset/index layout when moving them.
+Experiment tracking is selected with `logging.backend` in each experiment's `config.yaml`: `wandb` logs to Weights & Biases
+(project `segmentation-taggants`, one W&B group per experiment), `local` writes only to `results/`. See the experiment README for what is logged.
 
-## 2. Run the method
+Each run writes checkpoints, metrics, plots and qualitative predictions to its own folder `results/001_pilot_synthetic/<timestamp>_<config-hash>/`, and appends a summary row to `results/001_pilot_synthetic/runs.csv`.
 
-Run each stage from the repository root:
+---
 
-```bash
-bash scripts/reproduce.sh pretrain
-bash scripts/reproduce.sh sign
-bash scripts/reproduce.sh validate
-bash scripts/reproduce.sh detect
-```
+## Reference Baseline
 
-Defaults use DeiT-small, a clean surrogate trained with simple augmentation,
-10 secret keys, 64×64 random keys resized to the model input, an L-infinity
-perturbation bound of 16/255, and a per-key poison fraction of 0.0001 (up to
-0.001 in total). Signing uses 250 iterations, signed Adam, and a 0.01 LPIPS
-coefficient. Validation starts from a different initialization and uses 3A,
-Mixup, and CutMix. This is a reference workflow, not the full paper ablation grid.
-
-Override paths and experiment settings with environment variables:
-
-```bash
-MODEL=resnet18 LR=0.008 OUTPUT_ROOT=outputs/resnet bash scripts/reproduce.sh pretrain
-# Use the same MODEL/LR/OUTPUT_ROOT overrides for the remaining stages.
-```
-
-`EPOCHS`, `WORKERS`, `OPT`, `N_KEYS`, and `BUDGET_PER_KEY` are also configurable.
-All example seeds are public; generate and retain fresh private keys for a real
-ownership claim. `validate.py` reads the actual saved poison paths; it does not
-regenerate poisons from the `--budget` flag.
-
-### Entry points and outputs
-
-- `pretrain.py`: clean training, `checkpoint.pth`, arguments, and training metrics.
-- `sign.py`: gradient-matched perturbations, `poisons.pth`, `targets.pth`, and
-  runtime-generated signed images in `signature/`.
-- `validate.py`: fresh training on the signed dataset and secret-key metrics.
-- `detect.py`: top-k hit counts and a one-sided binomial tail under the paper's
-  null assumptions (`p = k / number_of_classes`).
-
-Use `python <entrypoint>.py --help` for individual arguments. Saved model
-folders may contain a direct `checkpoint.pth` or per-run subdirectories. Keep
-poison outputs in place when validating: their metadata records generated image
-paths. Never load untrusted serialized datasets or checkpoints.
-
-For an existing trained model:
-
-```bash
-python detect.py --checkpoint "$MODEL_CHECKPOINT" \
-  --targets "$KEY_DIR_1/targets.pth" "$KEY_DIR_2/targets.pth" --top-k 10
-```
-
-The statistical interpretation requires fresh random assignments independent of
-the tested model. Do not count repeated copies of a key as independent trials,
-select keys after observing the tested model, or ignore multiple-testing effects.
-
-## Validation and scope
-
-```bash
-python -m pip install pytest
-python -m pytest -q
-```
-
-Offline CPU tests cover image indexing, random-key generation, samplers, model
-forward passes, the binomial calculation, and a tiny train → sign → retrain →
-detect run. These check execution and interfaces, **not** paper-scale numerical
-reproduction. The full ImageNet experiments, optional Apex/LPIPS path, and
-multi-GPU execution have not been rerun for this release. The documented
-workflow is ImageNet-based; exploratory dataset/model branches are not all
-validated. Original historical keys and exact random seeds are intentionally
-not distributed.
-
-See [RELEASE_NOTES.md](RELEASE_NOTES.md), [SECURITY.md](SECURITY.md), and
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). No new repository-wide license
-was selected; see [LICENSE.md](LICENSE.md).
-
-## Citation
-
-Please cite the paper linked above (arXiv:2410.09101).
+The original paper code is housed in [`baseline/`](baseline/). It is preserved strictly as a read-only reference implementation. Do not edit files inside `baseline/`.

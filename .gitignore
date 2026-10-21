@@ -6,40 +6,23 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .DS_Store
-.vscode/
-.idea/
-# Credentials and local configuration
-.env
-.env.*
-*.pem
-*.key
-credentials*
-*secrets*.json
-*.local.yaml
-# Datasets, generated keys, checkpoints, results, and assets
+*.egg-info/
+.ipynb_checkpoints/
+
+# Datasets, checkpoints, results, and artifacts
 data/
-datasets/
+results/
 checkpoints/
 outputs/
 output/
-poisons/
-secret/
 wandb/
+mlruns/
 *.pt
 *.pth
-*.npy
-*.npz
+*.ckpt
 *.safetensors
-*.jsonl
-*.csv
-*.tsv
-*.log
-*.png
-*.jpg
-*.jpeg
-*.gif
-*.pdf
-*.zip
-*.tar
-*.gz
-*.ipynb
+
+# Local configuration
+.env
+.env.*
+*.local.yaml
