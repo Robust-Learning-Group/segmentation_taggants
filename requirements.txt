@@ -1,5 +1,5 @@
 # Core dependencies for semantic segmentation data taggants
-git+https://github.com/hallpaz/synthdataseg.git@d5ed00f416bb836e0942de5cd873a41ef59e46a6
+git+https://github.com/hallpaz/synthdataseg.git@65ea52d4f22437e9405f6209730dc745aa034621
 torch>=2.1.0
 torchvision>=0.16.0
 numpy>=1.24.0

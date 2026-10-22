@@ -40,8 +40,19 @@ def _split_seed(seed: Optional[int], split: str) -> Optional[int]:
 
 
 def make_synthetic_dataset(split: str, num_samples: int, image_size: Tuple[int, int], max_n: int,
-                           min_shapes: int, max_shapes: int, seed: Optional[int]) -> SyntheticSegmentationDataset:
+                           min_shapes: int, max_shapes: int, seed: Optional[int],
+                           polygon_sampler: Optional[str] = None) -> SyntheticSegmentationDataset:
     """On-the-fly dataset for one split (train/val/test use disjoint seeds)."""
+    extra = {}
+    if polygon_sampler is not None:
+        import inspect
+
+        if "polygon_sampler" not in inspect.signature(SyntheticSegmentationDataset.__init__).parameters:
+            raise ImportError(
+                f"data.polygon_sampler={polygon_sampler!r} requires synthdataseg >= 0.2.0; the installed version does "
+                "not support it. Update the synthdataseg pin in pyproject.toml / requirements.txt."
+            )
+        extra["polygon_sampler"] = polygon_sampler
     return SyntheticSegmentationDataset(
         num_samples=num_samples,
         image_size=tuple(image_size),
@@ -49,6 +60,7 @@ def make_synthetic_dataset(split: str, num_samples: int, image_size: Tuple[int, 
         min_shapes=min_shapes,
         max_shapes=max_shapes,
         seed=_split_seed(seed, split),
+        **extra,
     )
 
 
@@ -123,21 +135,37 @@ def render_split(params: Dict[str, Any], workers: int = 0, log_every: int = 1000
     return images, masks
 
 
-def _synthdataseg_version() -> str:
+def _generator_fingerprint() -> str:
+    """Version + hash of the installed synthdataseg source, so any generator change invalidates the cache.
+
+    The package version alone is not enough: editing the generator (e.g. how polygons are sampled) without
+    bumping the version would otherwise silently reuse stale cached images.
+    """
+    import synthdataseg
+
     try:
         from importlib.metadata import version
-        return version("synthdataseg")
+        ver = version("synthdataseg")
     except Exception:
-        return "unknown"
+        ver = "unknown"
+    pkg = Path(synthdataseg.__file__).parent
+    digest = hashlib.sha1()
+    for f in sorted(pkg.rglob("*.py")):
+        if "tests" in f.relative_to(pkg).parts:
+            continue
+        digest.update(f.relative_to(pkg).as_posix().encode())
+        digest.update(f.read_bytes())
+    return f"{ver}+{digest.hexdigest()[:12]}"
 
 
 def cache_path(cache_dir: str | Path, params: Dict[str, Any]) -> Path:
     """Deterministic cache file name for a split's generation parameters."""
-    key = dict(params, image_size=list(params["image_size"]), synthdataseg=_synthdataseg_version())
+    key = dict(params, image_size=list(params["image_size"]), synthdataseg=_generator_fingerprint())
     digest = hashlib.sha1(json.dumps(key, sort_keys=True).encode()).hexdigest()[:8]
     h, w = params["image_size"]
+    sampler = f"_{params['polygon_sampler']}" if params.get("polygon_sampler") else ""
     name = (f"synth_{params['split']}_n{params['num_samples']}_{h}x{w}_maxn{params['max_n']}"
-            f"_shapes{params['min_shapes']}-{params['max_shapes']}_seed{params['seed']}_{digest}.pt")
+            f"_shapes{params['min_shapes']}-{params['max_shapes']}{sampler}_seed{params['seed']}_{digest}.pt")
     return Path(cache_dir) / name
 
 
@@ -154,7 +182,7 @@ def load_or_render_split(params: Dict[str, Any], cache_dir: str | Path, workers:
     images, masks = render_split(params, workers=workers)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".pt.tmp")
-    torch.save({"images": images, "masks": masks, "params": params}, tmp)
+    torch.save({"images": images, "masks": masks, "params": params, "generator": _generator_fingerprint()}, tmp)
     os.replace(tmp, path)  # atomic: an interrupted render never leaves a truncated cache file
     return CachedSegmentationDataset(images, masks, registry)
 
@@ -172,6 +200,7 @@ def build_datasets(
     seed: Optional[int] = None,
     cache_dir: Optional[str | Path] = None,
     generation_workers: int = 0,
+    polygon_sampler: Optional[str] = None,
 ) -> Dict[str, Dataset]:
     """Datasets for ``train``, ``val`` and (if ``test_samples > 0``) ``test``.
 
@@ -186,6 +215,8 @@ def build_datasets(
             continue
         params = dict(split=split, num_samples=int(n), image_size=tuple(int(v) for v in image_size),
                       max_n=int(max_n), min_shapes=int(min_shapes), max_shapes=int(max_shapes), seed=seed)
+        if polygon_sampler is not None:
+            params["polygon_sampler"] = str(polygon_sampler)
         if cache_dir:
             datasets[split] = load_or_render_split(params, cache_dir, workers=generation_workers)
         else:

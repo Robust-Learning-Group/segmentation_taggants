@@ -1,0 +1,75 @@
+# Experiment 003: identical to 002 (model, data sizes, optimisation) except that the convex N-gon classes are
+# sampled with synthdataseg's "wellformed" sampler (every polygon shows all N corners) instead of Valtr's uniform
+# random polygons, which made triangle / quadrilateral / pentagon visually ambiguous. See README.md.
+experiment_name: "003_shapes6_wellformed"
+seed: 42
+device: "auto"          # "auto" (mps > cuda > cpu), "mps", "cuda", or "cpu"
+output_dir: null        # null -> <results_root>/<experiment>/<YYYYmmdd-HHMMSS>_<config-hash>
+results_root: "results" # Colab notebook points this at Google Drive
+
+data:
+  num_classes: 6        # 0 background, 1 star, 2 crown, 3 triangle, 4 quadrilateral, 5 pentagon
+  max_n: 5              # largest N-gon = pentagon (must be num_classes - 1)
+  image_size: [256, 256]
+  min_shapes: 2         # every image has 2-3 shapes -> occlusions/adjacency in every sample
+  max_shapes: 3
+  train_samples: 5000   # 1000 x 5 shape classes (each class appears in ~50% of images)
+  val_samples: 1000     # model selection + monitoring (seed + 1000)
+  test_samples: 1000    # held-out, evaluated once with the best checkpoint (seed + 2000)
+  batch_size: 16
+  augment: true         # random flips + 90-degree rotations (label-preserving, applied on the GPU)
+  polygon_sampler: "wellformed"  # the only change vs 002 (requires synthdataseg >= 0.2.0)
+  cache_dir: "data/cache"   # render each split once (~65 ms/image), then serve from memory
+  generation_workers: 0     # 0 = all CPU cores for rendering the cache
+  num_workers: 0        # in-memory cached data needs no loader workers
+  pin_memory: false     # enabled automatically on CUDA
+
+model:
+  in_channels: 3
+  num_classes: ${data.num_classes}
+  up_channels: 16       # base width; 16 * 2^depth channels at the bottleneck (256)
+  depth: 4              # 4 downsamplings: 188 px receptive field, 1.94M params
+
+training:
+  epochs: 100
+  lr: 0.001             # peak AdamW learning rate
+  weight_decay: 0.0001
+  loss: "ce_dice"       # cross-entropy + soft Dice (Dice directly targets overlap / IoU)
+  dice_weight: 1.0
+  scheduler: "cosine"   # per-step linear warmup, then cosine decay
+  warmup_epochs: 3
+  min_lr_ratio: 0.01    # lr decays to 1e-5
+  amp: true             # fp16 mixed precision on CUDA (ignored on CPU/MPS)
+  grad_clip: null
+  checkpoint_every: 1   # checkpoints/last.pth every epoch (~25 MB): lose at most one epoch on a disconnect
+  resume: "auto"        # continue the newest unfinished run with the same config, if there is one
+
+evaluation:
+  save_plots: true
+  plot_every: 5               # refresh plots/ (curves, per-class metrics, confusion matrices) every 5 epochs
+  plot_predictions_every: 10  # predictions/epoch_XXX.png (+ W&B overlays) every 10 epochs -> 10 grids in total
+  num_visual_samples: 8
+
+logging:
+  # "local": results folder only. "wandb": also log to Weights & Biases (the Colab notebook switches this on
+  # automatically when a WANDB_API_KEY secret is available).
+  backend: "local"
+  wandb:
+    project: "segmentation-taggants"
+    entity: null
+    group: null         # null -> experiment_name
+    name: null          # null -> run folder name
+    tags: ["shapes6", "unet-d4-c16", "ce-dice", "wellformed-polygons"]
+    notes: null
+    mode: "online"
+    log_model: false
+
+hydra:
+  run:
+    # New runs: timestamp + config hash. With training.resume=auto|<path>: the run folder being resumed.
+    dir: ${run_dir:${now:%Y%m%d-%H%M%S}}
+  sweep:
+    dir: ${results_root}/${experiment_name}/multirun_${now:%Y%m%d-%H%M%S}
+    subdir: ${hydra.job.num}_${config_hash:}
+  job:
+    chdir: false

@@ -65,6 +65,13 @@ uninterrupted one exactly (verified on CPU: identical per-epoch metrics and test
 * Continue a specific run (e.g. train longer): `training.resume=<run folder or checkpoint> training.epochs=150`
   (the cosine schedule is stretched from the current step; a warning notes the changed config hash).
 
+## Known issue: ambiguous polygon classes
+
+This experiment uses `synthdataseg` at commit `d5ed00f` (v0.1.0), whose N-gon classes are uniformly random convex
+polygons (Valtr's algorithm). Only ~57% of quadrilaterals and ~32% of pentagons show all their corners, so the
+polygon labels are partly ambiguous and polygon IoU stays low (epoch 61: triangle 0.49, quadrilateral 0.30,
+pentagon 0.34). Kept as the baseline (`data.polygon_sampler: "valtr"`, which reproduces the v0.1.0 images exactly with synthdataseg >= 0.2.0); see [`003_shapes6_wellformed`](../003_shapes6_wellformed/README.md).
+
 ## Results
 
 | Run | val mIoU | val mIoU(fg) | test mIoU (best ckpt) | test mIoU(fg) | Notes |

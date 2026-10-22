@@ -276,6 +276,7 @@ def train_segmentation(cfg: DictConfig) -> Dict[str, Any]:
         test_samples=int(cfg.data.test_samples), min_shapes=int(cfg.data.min_shapes),
         max_shapes=int(cfg.data.max_shapes), max_n=cfg.data.max_n, seed=int(cfg.seed),
         cache_dir=cfg.data.cache_dir, generation_workers=int(cfg.data.generation_workers),
+        polygon_sampler=cfg.data.polygon_sampler,
     )
     print(f"Datasets ready in {time.time() - t0:.1f}s: " + ", ".join(f"{k}={len(v)}" for k, v in datasets.items()))
     loader_gen = torch.Generator().manual_seed(int(cfg.seed))
@@ -308,6 +309,7 @@ def train_segmentation(cfg: DictConfig) -> Dict[str, Any]:
     history: List[Dict[str, Any]] = []
     best: Dict[str, Any] = {"epoch": None, f"val_{SELECT_METRIC}": float("-inf")}
     wandb_run_id: Optional[str] = None
+    ckpt_wandb_run_id: Optional[str] = None
     if resume_file is not None:
         state = torch.load(resume_file, map_location=device, weights_only=False)
         model.load_state_dict(state["model"])
@@ -318,7 +320,7 @@ def train_segmentation(cfg: DictConfig) -> Dict[str, Any]:
         start_epoch = int(state["epoch"])
         history = list(state["history"])
         best = dict(state["best"])
-        wandb_run_id = state.get("wandb_run_id")
+        wandb_run_id = ckpt_wandb_run_id = state.get("wandb_run_id")
         restore_rng_state(state["rng"], loader_gen, aug_gen)
         if state.get("config_hash") != cfg_hash:
             print(f"WARNING: resuming a run trained with config hash {state.get('config_hash')} using {cfg_hash}; "
@@ -339,6 +341,10 @@ def train_segmentation(cfg: DictConfig) -> Dict[str, Any]:
     tracker = build_tracker(cfg, output_dir, class_names, vis_images, vis_masks, device,
                             run_name=run_id, resume_id=wandb_run_id)
     wandb_run_id = tracker.run_id or wandb_run_id
+    if tracker.backend == "wandb" and history and ckpt_wandb_run_id is None:
+        # Resuming a run that was not logged to W&B before: replay the epochs already trained.
+        tracker.log_history(history)
+        print(f"W&B: back-filled {len(history)} epoch(s) from the checkpoint history")
     if wandb_run_id:
         atomic_write_text(output_dir / "wandb_run_id.txt", wandb_run_id + "\n")
     tracker.set_config({"model/n_params": n_params, "data/class_names": class_names, "run/id": run_id,
@@ -499,6 +505,7 @@ def train_segmentation(cfg: DictConfig) -> Dict[str, Any]:
             "depth": int(cfg.model.depth), "num_classes": num_classes,
             "image_size": "x".join(str(v) for v in cfg.data.image_size),
             "shapes": f"{cfg.data.min_shapes}-{cfg.data.max_shapes}",
+            "polygon_sampler": str(cfg.data.polygon_sampler or "library default"),
             "train_samples": int(cfg.data.train_samples),
             "final_val_loss": final_val["loss"],
             **{f"final_val_{k}": final_val[k] for k in SCALAR_METRICS},

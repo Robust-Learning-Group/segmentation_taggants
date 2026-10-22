@@ -73,6 +73,11 @@ def test_config_hash_ignores_location_logging_and_resume():
                                    "data": {"cache_dir": "/cache"}, "logging": {"backend": "wandb"}})
     assert config_hash(base) == config_hash(other)
     assert config_hash(base) != config_hash(OmegaConf.merge(base, {"training": {"lr": 0.002}}))
+    # unset optional settings do not count, so adding one to the schema keeps existing hashes stable
+    container = OmegaConf.to_container(base)
+    container["data"]["future_option"] = None
+    assert config_hash(container) == config_hash(base)
+    assert config_hash(base) != config_hash(OmegaConf.merge(base, {"data": {"polygon_sampler": "valtr"}}))
 
 
 def test_find_resumable_run_and_resume_paths(tmp_path):

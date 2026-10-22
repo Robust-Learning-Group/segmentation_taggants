@@ -15,7 +15,7 @@ dependencies = [
   "hydra-core>=1.3.2",
   "omegaconf>=2.3.0",
   # Procedural synthetic segmentation dataset (pinned commit for reproducibility)
-  "synthdataseg @ git+https://github.com/hallpaz/synthdataseg.git@d5ed00f416bb836e0942de5cd873a41ef59e46a6",
+  "synthdataseg @ git+https://github.com/hallpaz/synthdataseg.git@65ea52d4f22437e9405f6209730dc745aa034621",
 ]
 
 [dependency-groups]

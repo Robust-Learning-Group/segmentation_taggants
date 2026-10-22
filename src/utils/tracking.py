@@ -51,6 +51,9 @@ class LocalTracker:
     def log_images(self, images: Dict[str, Path]) -> None:
         pass
 
+    def log_history(self, history: Sequence[Dict[str, Any]]) -> None:
+        pass
+
     def finish(self, exit_code: int = 0) -> None:
         pass
 
@@ -107,6 +110,10 @@ class WandbTracker(LocalTracker):
             resume="allow" if resume_id else None,
         )
         self.run_id = self.run.id
+        # Printed without the "wandb:" prefix so log monitors (e.g. the Colab notebook) can show it.
+        print(f"W&B run: {getattr(self.run, 'url', None) or '(offline: sync later with `wandb sync`)'} "
+              f"[entity={getattr(self.run, 'entity', None)}, project={getattr(self.run, 'project', None)}, "
+              f"mode={self.wcfg.mode}{', resumed' if resume_id else ''}]", flush=True)
         # Per-epoch x-axis and run-table summaries.
         self.run.define_metric("epoch")
         self.run.define_metric("train/*", step_metric="epoch")
@@ -120,6 +127,15 @@ class WandbTracker(LocalTracker):
     # ------------------------------------------------------------------ helpers
     def set_config(self, values: Dict[str, Any]) -> None:
         self.run.config.update(values, allow_val_change=True)
+
+    def log_history(self, history: Sequence[Dict[str, Any]]) -> None:
+        """Back-fill per-epoch scalars from a checkpoint's history (e.g. a run started with backend=local)."""
+        for h in history:
+            train = {k: h.get(f"train_{k}") for k in SCALAR_METRICS}
+            val = {k: h.get(f"val_{k}") for k in SCALAR_METRICS}
+            train["loss"], val["loss"] = h.get("train_loss"), h.get("val_loss")
+            val["per_class_iou"] = h.get("val_per_class_iou") or []
+            self.log_epoch(int(h["epoch"]), train, val, lr=h.get("lr"))
 
     def log_images(self, images: Dict[str, Path]) -> None:
         """Upload locally rendered figures (training curves, prediction grids, ...)."""
@@ -144,7 +160,7 @@ class WandbTracker(LocalTracker):
             log[f"train/{key}"] = train[key]
             log[f"val/{key}"] = val[key]
         for name, iou in zip(self.class_names, val["per_class_iou"]):
-            if iou == iou:  # skip NaN (class absent from GT and predictions)
+            if iou is not None and iou == iou:  # skip NaN/None (class absent from GT and predictions)
                 log[f"val_iou/{name}"] = iou
         if lr is not None:
             log["lr"] = lr

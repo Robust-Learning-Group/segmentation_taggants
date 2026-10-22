@@ -2054,7 +2054,7 @@ requires-dist = [
     { name = "omegaconf", specifier = ">=2.3.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "scipy", specifier = ">=1.10.0" },
-    { name = "synthdataseg", git = "https://github.com/hallpaz/synthdataseg.git?rev=d5ed00f416bb836e0942de5cd873a41ef59e46a6" },
+    { name = "synthdataseg", git = "https://github.com/hallpaz/synthdataseg.git?rev=65ea52d4f22437e9405f6209730dc745aa034621" },
     { name = "torch", specifier = ">=2.1.0" },
     { name = "torchvision", specifier = ">=0.16.0" },
     { name = "tqdm", specifier = ">=4.65.0" },
@@ -2122,8 +2122,8 @@ wheels = [
 
 [[package]]
 name = "synthdataseg"
-version = "0.1.0"
-source = { git = "https://github.com/hallpaz/synthdataseg.git?rev=d5ed00f416bb836e0942de5cd873a41ef59e46a6#d5ed00f416bb836e0942de5cd873a41ef59e46a6" }
+version = "0.2.0"
+source = { git = "https://github.com/hallpaz/synthdataseg.git?rev=65ea52d4f22437e9405f6209730dc745aa034621#65ea52d4f22437e9405f6209730dc745aa034621" }
 dependencies = [
     { name = "matplotlib" },
     { name = "numpy" },

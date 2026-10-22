@@ -28,6 +28,10 @@ class DataConfig:
     cache_dir: Optional[str] = None  # render each split once and serve it from memory (None = on-the-fly)
     generation_workers: int = 0  # processes used to render the cache (0 = all CPU cores)
     augment: bool = False  # random flips + 90-degree rotations on the training batches (label-preserving)
+    # How synthdataseg samples the convex N-gon classes: "wellformed" (N clearly visible corners),
+    # "regular" or "valtr" (uniform random, <= v0.1.0 behaviour). None = library default (needs synthdataseg >= 0.2
+    # for any explicit value).
+    polygon_sampler: Optional[str] = None
 
     def __post_init__(self) -> None:
         if self.batch_size <= 0:
@@ -198,11 +202,22 @@ def _drop_dotted(container: dict, dotted: str) -> None:
         node.pop(leaf, None)
 
 
+def _drop_none(node: Any) -> Any:
+    if isinstance(node, dict):
+        return {k: _drop_none(v) for k, v in node.items() if v is not None}
+    return node
+
+
 def config_hash(cfg: Any, length: int = 6) -> str:
-    """Short, stable hash of the hyperparameters (identical settings -> identical hash)."""
+    """Short, stable hash of the hyperparameters (identical settings -> identical hash).
+
+    Unset (None) values are ignored, so adding a new optional setting to the schema does not change the hash of
+    existing configurations (which would break auto-resume of their runs).
+    """
     container = OmegaConf.to_container(cfg, resolve=True) if OmegaConf.is_config(cfg) else json.loads(json.dumps(cfg))
     for key in HASH_EXCLUDED_KEYS:
         _drop_dotted(container, key)
+    container = _drop_none(container)
     digest = hashlib.sha1(json.dumps(container, sort_keys=True, default=str).encode("utf-8")).hexdigest()
     return digest[:length]
 
